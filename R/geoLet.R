@@ -904,78 +904,33 @@ geoLet<-function( use.ROICache = TRUE ) {
       cat("\n=================================================================================")
     }
     if( dataStorage$info$structures[[Structure]]$type == "NIFTI" ) {
-      res <- getROIVoxels.NIFTI(Structure = Structure , new.pixelSpacing=new.pixelSpacing,
-                                SeriesInstanceUID = SeriesInstanceUID, croppedCube  = croppedCube,
-                                onlyVoxelCube = onlyVoxelCube, voxel.inclusion.threshold = voxel.inclusion.threshold,
-                                giveBackOriginalImageToo = giveBackOriginalImageToo)
+      stop("\n Sorry, the NIFTI format has been pissed off :) \n")
+      # res <- getROIVoxels.NIFTI(Structure = Structure , new.pixelSpacing=new.pixelSpacing,
+      #                           SeriesInstanceUID = SeriesInstanceUID, croppedCube  = croppedCube,
+      #                           onlyVoxelCube = onlyVoxelCube, voxel.inclusion.threshold = voxel.inclusion.threshold,
+      #                           giveBackOriginalImageToo = giveBackOriginalImageToo)
     }
     
     return( res )
   }
   #=================================================================================
-  # NAME: getROIVoxels.NIFTI
-  # restituisce i voxel interni ad una data ROI - DICOM
+  # NAME: getROIFeatures
+  # restituisce le features di una ROI
   #=================================================================================
-  getROIVoxels.NIFTI<-function( Structure  , new.pixelSpacing=c(), SeriesInstanceUID = NA, croppedCube  = TRUE, 
-                                onlyVoxelCube = FALSE, voxel.inclusion.threshold, giveBackOriginalImageToo = FALSE ) {
-    objS<-services();
-    
-    if(SOPClassUIDList[SOPClassUIDList[,"SeriesInstanceUID"] == SeriesInstanceUID & SOPClassUIDList[,"type"]=="IMG","field2Order"][1] !="IPP.z") {
-      logObj$sendLog(  "ERROR: the NIFTI ROI extractions only work with axial images, for the moment", "ERR"  );
+  getROIFeatures<-function( Structure , statistical = TRUE, morphological = TRUE, GLCM = TRUE) {
+    ROI <- getROIVoxels( Structure = Structure)
+    arr.features <- c()
+    if( statistical == TRUE ) {
+      a <- statisticalFeatures(imgObj = ROI$voxelCube) 
+      arr.features <- c( arr.features , a)
     }
-    
-    
-    if( length(new.pixelSpacing) > 1) stop("\n Interpolation not yet supported")
-    
-    fileNameWithPath <- dataStorage$info$structures[[ Structure ]]$fileName
-    aaa <- readNIfTI(fname = fileNameWithPath)
-    nifti.VC <- slot(aaa,".Data")
-    if( slot(aaa,"reoriented") == FALSE ) logObj$sendLog(  "In the NIFTI file, 'reoriented' is set to FALSE" ,"ERR" );
-    if( slot(aaa,"scl_slope") != 1 ) logObj$sendLog(  "In the NIFTI file, 'slope' is no 1" ,"ERR" );
-    if( slot(aaa,"scl_inter") != 0 ) logObj$sendLog(  "In the NIFTI file, 'intercept' is not 1" ,"ERR" );
-    # https://brainder.org/2012/09/23/the-nifti-file-format/  
-    if(slot(aaa,"qform_code") != 1 ) logObj$sendLog(  "In the NIFTI file, 'qform_code' is not 1" ,"ERR" );
-    # if(slot(aaa,"sform_code") != 1 ) logObj$sendLog(  "In the NIFTI file, 'sform_code' is not 1" ,"ERR" );
-    if(slot(aaa,"slice_code") != 0 ) logObj$sendLog(  "In the NIFTI file, 'slice_code' is not 0" ,"ERR" );
-    
-    dim.x <- slot(aaa,"dim_")[2];    dim.y <- slot(aaa,"dim_")[3];    dim.z <- slot(aaa,"dim_")[4]
-    
-    # slice <- 10;  nifti.VC[ which(nifti.VC==0) ] <- NA;    image(VC[,,slice]);    image(nifti.VC[,,35* slice/(dim(VC)[3]) ], add=T,col='green')
-    VC <- getImageVoxelCube(SeriesInstanceUID = SeriesInstanceUID)
-    
-    masked.array <- array(0,dim = dim(VC) )
-    
-    if(  dim.x < dim(VC)[1]  | dim.y < dim(VC)[2] | dim.z < dim(VC)[3] ) logObj$sendLog(  "Warning, the NIFTI cube has different dimension: we propose a visual check of the results"  );
-    
-    matrice.Punti <- which( nifti.VC!=0,arr.ind = T )
-    
-    xlim <- range(matrice.Punti[,1])
-    ylim <- range(matrice.Punti[,1])
-    zlim <- range(matrice.Punti[,1])
-    
-    for( riga in 1:nrow(matrice.Punti )) {
-      pos.old.VC <- c(  ( matrice.Punti[riga,1] / dim(nifti.VC)[1]) * dim( VC )[1],
-                        ( matrice.Punti[riga,2] / dim(nifti.VC)[2]) * dim( VC )[2],
-                        ( matrice.Punti[riga,3] / dim(nifti.VC)[3]) * dim( VC )[3]  )
-      # ( matrice.Punti[riga,3] )  )
-      pos.old.VC <- ceiling( pos.old.VC )
-      masked.array[ pos.old.VC[1], pos.old.VC[2], pos.old.VC[3]  ] <- masked.array[ pos.old.VC[1], pos.old.VC[2], pos.old.VC[3]  ] + 1
-      pos.old.VC <- floor( pos.old.VC )
-      masked.array[ pos.old.VC[1], pos.old.VC[2], pos.old.VC[3]  ] <- masked.array[ pos.old.VC[1], pos.old.VC[2], pos.old.VC[3]  ] + 1
-      
-    }
-    
-    # calcola il rapporto in volume dei voxels e guarda quali sono sopra o sotto soglia
-    rapporto <- round( ( dim.x * dim.y * dim.z )  / (dim(VC)[1] * dim(VC)[2] * dim(VC)[3])  * voxel.inclusion.threshold )
-    
-    masked.array[ which( masked.array < rapporto ) ] <- 0
-    masked.array[ which( masked.array != 0 ) ] <- 1
-    
-    # Tenere a 0 o a NA???
-    masked.array[ which( masked.array == 0 ) ] <- NA
-    
-    return(masked.array)
-  }
+    if( morphological == TRUE ) {
+      a <- morphologicalFeatures(imgObj = ROI$voxelCube,px = getPixelSpacing()[1], py = getPixelSpacing()[2], pz = getPixelSpacing()[3])   
+      arr.features <- c( arr.features , a)
+    }    
+    arr.features <- unlist(arr.features)
+    return( arr.features )
+  }  
   #=================================================================================
   # NAME: getROIVoxels.dicom
   # restituisce i voxel interni ad una data ROI - DICOM
@@ -1503,6 +1458,7 @@ geoLet<-function( use.ROICache = TRUE ) {
     "getROIList"=getROIList,
     "getFilesInfo"=getFilesInfo,
     "getROIVoxels"=getROIVoxels,
+    "getROIFeatures"=getROIFeatures,
     "getROIImageImageAssociations"=getROIImageImageAssociations,
     "get.CT.SeriesInstanceUID"=get.CT.SeriesInstanceUID,
     "get.MRI.SeriesInstanceUID"=get.MRI.SeriesInstanceUID,
@@ -1513,50 +1469,3 @@ geoLet<-function( use.ROICache = TRUE ) {
     "getDataStorage"=getDataStorage
   ))
 }
-# # -im
-# # -----------------------------------------
-# # primo approccio
-# # -----------------------------------------
-# i <- 1
-# j <- 1
-# k <- 1
-# q <- slot(aaa,"pixdim")[1]
-# 
-# q.b <- slot(aaa,"quatern_b")
-# q.c <- slot(aaa,"quatern_c")
-# q.d <- slot(aaa,"quatern_d")
-# q.a <- sqrt( 1 - q.b^2 - q.c^2 - q.d^2 )
-# 
-# R.M <- matrix(0,ncol=3, nrow=3)
-# R.M[1,1] <- q.a^2 + q.b^2 - q.c^2 - q.d^2
-# R.M[1,2] <- 2*(q.b*q.c-q.a*q.d)
-# R.M[1,3] <- 2*(q.b*q.d-q.a*q.c) 
-# R.M[2,1] <- 2*(q.b*q.c-q.a*q.d)
-# R.M[2,2] <- q.a^2 + q.b^2 - q.c^2 - q.d^2
-# R.M[2,3] <- 2*(q.c*q.d-q.a*q.b)
-# R.M[3,1] <- 2*(q.b*q.d-q.a*q.c)
-# R.M[3,2] <- 2*(q.c*q.d-q.a*q.b)
-# R.M[3,3] <- q.a^2 + q.b^2 - q.c^2 - q.d^2
-# 
-# vett.C <- c( slot(aaa,"pixdim")[2], slot(aaa,"pixdim")[3] , slot(aaa,"pixdim")[4] )
-# 
-# op.1 <- R.M %*% c(i,j, k*q)
-# op.2 <- c(0,0,0)
-# op.2[1] <- op.1[1]* vett.C[1]
-# op.2[2] <- op.1[2]* vett.C[2]
-# op.2[3] <- op.1[3]* vett.C[3]
-# op.2[1] < op.2[1] + slot(aaa,"qoffset_x")
-# op.2[2] < op.2[2] + slot(aaa,"qoffset_y")
-# op.2[3] < op.2[3] + slot(aaa,"qoffset_z")
-# risultato <- op.2
-# 
-# # -----------------------------------------
-# # secondo approccio
-# # -----------------------------------------
-# R.M <- matrix(c(slot(aaa,"srow_x"),slot(aaa,"srow_y"),slot(aaa,"srow_z"),0,0,0,1),byrow = T,ncol=4)
-# risultato <- R.M %*% c(i,j,k,1)
-# # -----------------------------------------
-# 
-# 
-# 
-# # -fm

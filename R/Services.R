@@ -344,7 +344,8 @@ services<-function() {
     cippa <-  binarize(matrice, -0.05, -0.03 ,reverse = TRUE) * matrice
     return(cippa)
   }
-  
+
+  # -------------------------------------------------------------------------------------------------
   return( list(
     "get3DPosFromNxNy"=get3DPosFromNxNy,
     "getPlaneEquationBetween3Points"=getPlaneEquationBetween3Points,
