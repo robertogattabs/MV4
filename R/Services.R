@@ -1,7 +1,7 @@
 #' service class
 #'
 #' @description  It handles messages from script to a chosen output (screen, file, etc.)
-#' @useDynLib moddicomV3
+#' @useDynLib MV4
 #' @export
 #' @import stringr XML misc3d
 services<-function() {
