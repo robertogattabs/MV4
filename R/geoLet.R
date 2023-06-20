@@ -994,14 +994,14 @@ geoLet<-function( use.ROICache = FALSE ) {
     
     # se esiste gia' in cache, usa quanto gia' c'e'
     # browser()
-    if( "ROI" %in% names(cacheArea)) {
-      if( Structure %in% names(cacheArea[["ROI"]]) & use.cacheArea == TRUE ) {
-        if ( cacheArea[["ROI"]][[Structure]]$SeriesInstanceUID == SeriesInstanceUID & length(new.pixelSpacing)==0 ) {
-          # return( cacheArea[["ROI"]][[Structure]]$voxelCube  )
-          return( cacheArea[["ROI"]][[Structure]]  )
-        }
-      }
-    }
+    # if( "ROI" %in% names(cacheArea)) {
+    #   if( Structure %in% names(cacheArea[["ROI"]]) & use.cacheArea == TRUE ) {
+    #     if ( cacheArea[["ROI"]][[Structure]]$SeriesInstanceUID == SeriesInstanceUID & length(new.pixelSpacing)==0 ) {
+    #       # return( cacheArea[["ROI"]][[Structure]]$voxelCube  )
+    #       return( cacheArea[["ROI"]][[Structure]]  )
+    #     }
+    #   }
+    # }
     
     # define some variables to make more clear the code
     numberOfRows<-as.numeric(dataStorage$info[[SeriesInstanceUID]][[1]]$Rows);
@@ -1144,14 +1144,14 @@ geoLet<-function( use.ROICache = FALSE ) {
     )
     
     # browser()
-    if(  length(new.pixelSpacing)==0 & use.cacheArea == TRUE) {
-      cacheArea[["ROI"]][[Structure]] <<- list()
-      cacheArea[["ROI"]][[Structure]]$SeriesInstanceUID <<- SeriesInstanceUID
-      if(length(new.pixelSpacing)>0)  cacheArea[["ROI"]][[Structure]]$pixelSpacing <<- new.pixelSpacing
-      if(length(old.ps)>0)  cacheArea[["ROI"]][[Structure]]$pixelSpacing <<- old.ps
-      cacheArea[["ROI"]][[Structure]]$voxelCube <<- ROIVoxelCube
-      cacheArea[["ROI"]][[Structure]]$original.ROIVoxelCube <<- original.ROIVoxelCube
-    }
+    # if(  length(new.pixelSpacing)==0 & use.cacheArea == TRUE) {
+    #   cacheArea[["ROI"]][[Structure]] <<- list()
+    #   cacheArea[["ROI"]][[Structure]]$SeriesInstanceUID <<- SeriesInstanceUID
+    #   if(length(new.pixelSpacing)>0)  cacheArea[["ROI"]][[Structure]]$pixelSpacing <<- new.pixelSpacing
+    #   if(length(old.ps)>0)  cacheArea[["ROI"]][[Structure]]$pixelSpacing <<- old.ps
+    #   cacheArea[["ROI"]][[Structure]]$voxelCube <<- ROIVoxelCube
+    #   cacheArea[["ROI"]][[Structure]]$original.ROIVoxelCube <<- original.ROIVoxelCube
+    # }
     
     return( da.restituire   )
   }
