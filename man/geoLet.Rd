@@ -4,7 +4,7 @@
 \alias{geoLet}
 \title{class for loading and presenting DICOM data}
 \usage{
-geoLet(use.ROICache = TRUE)
+geoLet(use.ROICache = FALSE)
 }
 \description{
 Instantiate an object of the class \code{geoLet}.This represents just the classname,
