@@ -53,6 +53,13 @@ geoLet<-function( use.ROICache = FALSE ) {
     loadCTRMNRDScans( );
     
     # ----------------------------------------------
+    # Load US
+    # ----------------------------------------------
+    if( internalAttributes$verbose == TRUE ) cat("\n Image Loading ( US and SC ):\n ")
+    loadUS( );    
+    loadSecondaryCapture();
+
+        # ----------------------------------------------
     # Carica l'RTStruct, se presente
     # ----------------------------------------------
     if( internalAttributes$verbose == TRUE ) cat("\n RTStruct Loading: ")
@@ -60,11 +67,130 @@ geoLet<-function( use.ROICache = FALSE ) {
     if( internalAttributes$verbose == TRUE ) cat( a$quantity," structures loaded" )
     
     # ----------------------------------------------
+    # Carica l'RTDose, se presente
+    # ----------------------------------------------
+    if( internalAttributes$verbose == TRUE ) cat("\n RTDose Loading: ")
+    loadRTDoseFiles()
+    if( internalAttributes$verbose == TRUE ) cat( a$quantity," dose loaded" )
+
+    # ----------------------------------------------
     # Carica i nifti, se presenti
     # ----------------------------------------------
     if( internalAttributes$verbose == TRUE ) cat("\n nifti files Loading: ")
     a <- loadNIFTIFileDescription()
     if( internalAttributes$verbose == TRUE ) cat( a$quantity," structures loaded" )
+    
+  }
+  
+  loadRTDoseFiles <- function() {
+    
+    qualiRTDose <- which( SOPClassUIDList[  , "kind"] == "RTDoseStorage" )
+    if( length(qualiRTDose) > 0 ) {
+      for( riga in qualiRTDose ) {
+        fileName <- SOPClassUIDList[qualiRTDose,"fileName" ]
+        righe <- as.numeric(getTag(tag = "0028,0010" , fileName = fileName ))
+        colonne <- as.numeric(getTag(tag = "0028,0011" , fileName = fileName ))
+        PixelSpacing <- getTag(tag = "0028,0030" , fileName = fileName )
+        BitsAllocated <- getTag(tag = "0028,0100" , fileName = fileName )
+        BitsStored <- getTag(tag = "0028,0101" , fileName = fileName )
+        HighBit <- getTag(tag = "0028,0102" , fileName = fileName )
+        PixelRepresentation <- getTag(tag = "0028,0103" , fileName = fileName )
+        DoseUnits <- getTag(tag = "3004,0002" , fileName = fileName )
+        DoseType <- getTag(tag = "3004,0004" , fileName = fileName )
+        GridFrameOffsetVector <- getTag(tag = "3004,000c" , fileName = fileName )
+        FrameOfReferenceUID <- getTag(tag = "0020,0052" , fileName = fileName )
+        SamplesPerPixel <- getTag(tag = "0028,0002" , fileName = fileName )
+        DoseGridScaling <- as.numeric(getTag(tag = "3004,000e" , fileName = fileName ))
+        
+        numSlices <- length(unlist(strsplit( GridFrameOffsetVector , "\\\\")))        
+        
+        if( SamplesPerPixel != "1") { stop(" SamplesPerPixel is expected to be '1' in the current version of moddicom") }
+        if( DoseType != "PHYSICAL") { stop(" SamplesPerPixel is expected to be 'PHYSICAL' in the current version of moddicom") }
+        if( DoseUnits != "GY") { stop(" SamplesPerPixel is expected to be 'GY' in the current version of moddicom") }
+        if( PixelRepresentation != "0") { stop(" PixelRepresentation is expected to be '0' in the current version of moddicom") }
+        if( HighBit != "31") { stop(" HighBit is expected to be '31' in the current version of moddicom") }
+        if( BitsStored != "32") { stop(" BitsStored is expected to be '32' in the current version of moddicom") }
+        if( BitsAllocated != "32") { stop(" HighBit is expected to be '32' in the current version of moddicom") }
+        
+        
+        
+        # rn <- readBin(con = fileName, what = "integer", size = 4, endian = "little",n = file.size(fileName))
+        rn <- readBin(con = fileName, what = "integer", size = 1, endian = "little",n = file.size(fileName))
+        rn <- rn[ length(rn):1 ]
+        
+        aaa <- unlist(lapply( seq(1, ( righe * colonne * numSlices * 4) , by = 4) , function( pos ) {
+          rn[ (pos+3) ] + rn[ (pos+2) ] * 2^8 + rn[ (pos+1) ] * 2^12 + rn[ (pos+0) ] * 2^16  
+        }))
+        rn <- aaa
+        
+        # rn <- rn[ length(rn):1 ]
+        # browser()
+        # oppa <- rn[ (length(rn)-( righe * colonne *numSlices)):length(rn)  ]
+        oppa <- rn[ 1:( righe * colonne * numSlices)   ]
+        oppa <- oppa[ length(oppa):1 ]
+        matRN <- array(0,c(righe,colonne,numSlices))
+        
+        ct<-1
+        for( z in seq(1,numSlices)) {
+          for(x in seq(1,righe)) {
+            for(y in seq(1,colonne)) {
+              matRN[x,colonne-y,z]<-oppa[ct]
+              ct<-ct+1 
+            }
+          }
+        } 
+        browser()
+        # matRN <- matRN * DoseGridScaling
+        
+        SOPInstanceUID <- as.character( SOPClassUIDList[riga,"SOPInstanceUID"] )
+        ImageOrientationPatient <-  SOPClassUIDList[riga,"ImageOrientationPatient"] 
+        
+        newMatRN <- array( 0 , c(colonne,righe,dim(matRN)[3]))
+        for(z in 1:(dim(matRN)[3]) ) {
+          immagine <- t(matRN[(dim(matRN)[1]):1,,z])
+          newMatRN[,,z] <- immagine
+        }        
+        
+        obj.S <- services()
+        doc <- obj.S$getXMLStructureFromDICOMFile( fileName = fileName, folderCleanUp = FALSE )
+        TransferSyntaxUID <- xpathApply(doc,'//element[@tag="0002,0010" and @name="TransferSyntaxUID"]',xmlValue)[[1]]
+        if( !(TransferSyntaxUID %in% c("1.2.840.10008.1.2.1","1.2.840.10008.1.2") )) {
+          stop("TransferSyntaxUID not compatible with the current version")
+        }
+        browser()
+        if( TransferSyntaxUID == "1.2.840.10008.1.2"){
+          # stop("TransferSyntaxUID not compatible with the current version")
+          cat("\n\t TransferSyntaxUID is not little Endian Explicit: conversion could take some minutes..")
+          toBits <- function (x, nBits = 32){ tail(rev(as.numeric(intToBits(x))),nBits) }
+          soglia.cache <- 5
+          voxel.2.consider <- which(newMatRN!=0,arr.ind = T)
+          # tabella <- table(voxel.2.consider)
+          # tabella <- tabella[order(tabella,decreasing = T)]
+          # arr.valori.indici <- names(which(tabella > soglia.cache))
+          tmp <- lapply(1:nrow(voxel.2.consider),function(riga) {
+            voxval <- newMatRN[ voxel.2.consider[riga,1], voxel.2.consider[riga,2], voxel.2.consider[riga,3] ] 
+            bitty <- toBits( voxval , nBits = 32)
+            newbitty <- c(bitty[17:32],bitty[1:16])
+            newMatRN[ voxel.2.consider[riga,1], voxel.2.consider[riga,2], voxel.2.consider[riga,3] ] <<- sum(unlist(lapply(1:length(newbitty) ,  function(i){ (2*newbitty[i])^(length(newbitty)-i)}  )))-1
+          })
+          browser()
+        }
+        newMatRN <- newMatRN * DoseGridScaling
+        
+        
+        dataStorage$doses[[ SOPInstanceUID ]] <<- list()
+        dataStorage$doses[[ SOPInstanceUID ]]$dose <<- newMatRN
+        dataStorage$doses[[ SOPInstanceUID ]]$rows <<- righe
+        dataStorage$doses[[ SOPInstanceUID ]]$cols <<- colonne
+        dataStorage$doses[[ SOPInstanceUID ]]$PixelSpacing <<- PixelSpacing
+        dataStorage$doses[[ SOPInstanceUID ]]$DoseUnits <<- DoseUnits
+        dataStorage$doses[[ SOPInstanceUID ]]$DoseType <<- DoseType
+        dataStorage$doses[[ SOPInstanceUID ]]$GridFrameOffsetVector <<- GridFrameOffsetVector
+        dataStorage$doses[[ SOPInstanceUID ]]$FrameOfReferenceUID <<- FrameOfReferenceUID
+        dataStorage$doses[[ SOPInstanceUID ]]$FrameOfReferenceUID <<- FrameOfReferenceUID
+
+      }
+    }
   }
   
   #=================================================================================
@@ -436,7 +562,30 @@ geoLet<-function( use.ROICache = FALSE ) {
         if( valore == "1.2.840.10008.5.1.4.1.1.4" ) MMatrix[riga, "kind"]<-"MRImageStorage"
         if( valore == "1.2.840.10008.5.1.4.1.1.128" ) MMatrix[riga, "kind"]<-"PositronEmissionTomographyImageStorage"
         if( valore == "1.2.840.10008.5.1.4.1.1.2.1" ) MMatrix[riga, "kind"]<-"CTImageStorage"
+        if( valore == "1.2.840.10008.5.1.4.1.1.6.1" ) MMatrix[riga, "kind"]<-"USImageStorage"
+        if( valore == "1.2.840.10008.5.1.4.1.1.88.22" ) MMatrix[riga, "kind"]<-"EnhancedSR"
+        if( valore == "1.2.840.10008.5.1.4.1.1.7" ) MMatrix[riga, "kind"]<-"SecondaryCaptureImageStorage"        
         
+        
+        if( MMatrix[riga, "kind"] == "RTDoseStorage") {
+          MMatrix[riga, "ImageOrientationPatient"]<-getDICOMTag(fileName = fileNameWithPath , tag = "0020,0037")
+          GridFrameOffsetVector <- getTag(tag = "3004,000c" , fileName = fileNameWithPath )
+          PixelSpacing <- getTag(tag = "0028,0030" , fileName = fileNameWithPath )
+          psp <- unlist(str_split(PixelSpacing,"\\\\"))
+          GFOV <- as.numeric(unlist(str_split( GridFrameOffsetVector ,"\\\\")))
+          GFOV <- unique(as.numeric(unlist(lapply( 2:length(GFOV) , function(i) {  GFOV[i]-GFOV[i-1] })))    )
+          if( length(GFOV) > 1 ) {
+            stop("GridFrameOffsetVector has more delta grid")
+          }
+          MMatrix[riga,"p.x"] <- psp[1]; MMatrix[riga,"p.y"] <- psp[2]; MMatrix[riga,"p.z"] <- GFOV
+          # MMatrix[riga, "ImagePositionPatient"]<-getDICOMTag(fileName = fileNameWithPath , tag = "0020,0032")
+        }
+        if( MMatrix[riga, "kind"] == "USImageStorage") {
+          MMatrix[riga, "type"]<-"IMG.US"  
+        }
+        if( MMatrix[riga, "kind"] == "SecondaryCaptureImageStorage") {
+          MMatrix[riga, "type"]<-"IMG.SecondCapt"  
+        }        
         if( MMatrix[riga, "kind"] == "CTImageStorage" |
             MMatrix[riga, "kind"] == "MRImageStorage" |
             MMatrix[riga, "kind"] == "PositronEmissionTomographyImageStorage" )  {
@@ -447,6 +596,7 @@ geoLet<-function( use.ROICache = FALSE ) {
           # Prendi il Pixel Spacing e lo slice thickness
           pixelSpacing<-objS$splittaTAG(getDICOMTag(fileName = fileNameWithPath,tag = "0028,0030"))
           sliceThickness<-objS$splittaTAG(getDICOMTag(fileName = fileNameWithPath,tag = "0018,0050"))
+          # MMatrix[riga, "ImagePositionPatient"]<-getDICOMTag(fileName = fileNameWithPath , tag = "0020,0032")
           MMatrix[riga, "p.x"]<-pixelSpacing[1]
           MMatrix[riga, "p.y"]<-pixelSpacing[2]
           MMatrix[riga, "p.z"]<-sliceThickness
@@ -509,6 +659,52 @@ geoLet<-function( use.ROICache = FALSE ) {
     SOPClassUIDList <- MMatrix
     return(SOPClassUIDList);
   }
+  
+  loadUS <- function() {
+    objS <- services()
+    # Cicla sulle sole righe corrispondenti a delle immagini US
+    righe.con.immagini <- which(SOPClassUIDList[,"type"]=="IMG.US") 
+    for( riga in righe.con.immagini ) {
+      fileName <- SOPClassUIDList[riga,"fileName"]
+      SeriesInstanceUID<-SOPClassUIDList[riga, "SeriesInstanceUID"]
+      
+      if( internalAttributes$verbose == TRUE ) cat("\n\t ",fileName)
+      SOPInstanceUID <- SOPClassUIDList[riga,"SOPInstanceUID"]
+      
+      if( !(SeriesInstanceUID %in% names(dataStorage[["info"]])) )  dataStorage[["info"]][[SeriesInstanceUID]] <<- list() 
+      
+      SingleSliceLoader <- loadCTRMNRDScans.SingleSlice( fileName = fileName )
+      immagine <- SingleSliceLoader$immagine
+      
+      # now update the structure in memory
+      if( length( dataStorage$img ) == 0 ) dataStorage$img <<- list()
+      if( length( dataStorage$img[[SeriesInstanceUID]] ) == 0 ) dataStorage$img[[ SeriesInstanceUID ]] <<- list()
+      dataStorage$img[[ SeriesInstanceUID ]][[ SOPInstanceUID ]] <<- immagine
+    }
+  }
+  
+  loadSecondaryCapture <- function() {
+    objS <- services()
+    # Cicla sulle sole righe corrispondenti a delle immagini US
+    righe.con.immagini <- which(SOPClassUIDList[,"type"]=="IMG.SecondCapt") 
+    for( riga in righe.con.immagini ) {
+      fileName <- SOPClassUIDList[riga,"fileName"]
+      SeriesInstanceUID<-SOPClassUIDList[riga, "SeriesInstanceUID"]
+      
+      if( internalAttributes$verbose == TRUE ) cat("\n\t ",fileName)
+      SOPInstanceUID <- SOPClassUIDList[riga,"SOPInstanceUID"]
+      
+      if( !(SeriesInstanceUID %in% names(dataStorage[["info"]])) )  dataStorage[["info"]][[SeriesInstanceUID]] <<- list() 
+      
+      SingleSliceLoader <- loadCTRMNRDScans.SingleSlice( fileName = fileName )
+      immagine <- SingleSliceLoader$immagine
+      
+      # now update the structure in memory
+      if( length( dataStorage$img ) == 0 ) dataStorage$img <<- list()
+      if( length( dataStorage$img[[SeriesInstanceUID]] ) == 0 ) dataStorage$img[[ SeriesInstanceUID ]] <<- list()
+      dataStorage$img[[ SeriesInstanceUID ]][[ SOPInstanceUID ]] <<- immagine
+    }
+  }  
   #=================================================================================
   # loadCTRMRDNScans
   # Loads a DICOM CT/MR Scans
@@ -640,6 +836,33 @@ geoLet<-function( use.ROICache = FALSE ) {
     
     if(is.na(rescale.intercept)) rescale.intercept = 0;
     if(is.na(rescale.slope)) rescale.slope = 1;
+
+    # se e' un US, non moltiplicare, esci subito'
+    if( SOPClassUID == "USImageStorage" ) {
+      if( rescale.intercept != 0 ) stop("\n Error: rescale.intercept not 0 for an US")
+      if( rescale.slope != 1 ) stop("\n Error: rescale.slope not 1 for an US")      
+      
+      fields$rescale.intercept <- rescale.intercept
+      fields$rescale.slope <- rescale.slope
+      fields$rescale.type <- rescale.type
+      
+      return( list( "immagine" = immagine,
+                    "fields" = fields ) )      
+    }
+    # se e' un US, non moltiplicare, esci subito'
+    if( SOPClassUID == "SecondaryCaptureImageStorage" ) {
+      # browser()
+      if( rescale.intercept != 0 ) stop("\n Error: rescale.intercept not 0 for an US")
+      if( rescale.slope != 1 ) stop("\n Error: rescale.slope not 1 for an US")      
+      
+      fields$rescale.intercept <- rescale.intercept
+      fields$rescale.slope <- rescale.slope
+      fields$rescale.type <- rescale.type
+      
+      return( list( "immagine" = immagine,
+                    "fields" = fields ) )      
+    }    
+    
     immagine <- immagine * rescale.slope + rescale.intercept
     
     immagine <- objServ$rotateMatrix( immagine, rotations = 1 )
@@ -752,9 +975,25 @@ geoLet<-function( use.ROICache = FALSE ) {
     pixelRepresentation<-as.numeric(getDICOMTag(fileName = fileName,tag = '0028,0100'))
     SOPClassUID <- SOPClassUIDList[ SOPClassUIDList[,"fileName"]==fileName, "kind"]
     # browser()
-    if( SOPClassUID != "RTDoseStorage" ) {
-      if(bitsAllocated!=16)
-        logObj$sendLog( "16bit pixel are allowed only for non-RTDoseStorage", "ERR"  );
+    
+    if( SOPClassUID == "SecondaryCaptureImageStorage" ) {
+      PhotometricInterpretation <- getDICOMTag(fileName = fileName,tag = '0028,0004')
+      SamplesPerPixel <- getDICOMTag(fileName = fileName,tag = '0028,0002')        
+      BitsAllocated <- as.numeric(getDICOMTag(fileName = fileName,tag = '0028,0100'))
+      BitsStored <- getDICOMTag(fileName = fileName,tag = '0028,0101')
+      HighBit <- getDICOMTag(fileName = fileName,tag = '0028,0102')
+      PixelRepresentation <- getDICOMTag(fileName = fileName,tag = '0028,0103')    
+      
+      # browser()
+      if(! PhotometricInterpretation %in% c("MONOCHROME1","MONOCHROME2","RGB") ) {
+        stop("\n PhotometricInterpretation not valid: #MaiUnaGioiaError")
+      }
+      if(! (BitsAllocated == 8  & BitsStored==8 & HighBit == 7 ) ) {
+        stop("\n BitsAllocated, BitsStored and HighBit are expected to be 8,8,7: #MaiUnaGioiaError")
+      }
+      if(! (SamplesPerPixel == 1) ) {
+        stop("\n SamplesPerPixel not valid, should be 1: #MaiUnaGioiaError")
+      }
       if ( Sys.info()["sysname"] == "Windows") {
         # browser()
         fileNameRAWFS<-chartr("\\","/",fileNameRAW);
@@ -764,7 +1003,69 @@ geoLet<-function( use.ROICache = FALSE ) {
       
       if(!file.exists(fileNameRAWFS)) logObj$sendLog( "problem in creating image binary file in geoLet::getImageFromRAW()", "ERR"  );
       
+      rn <- readBin(con = fileNameRAWFS, what="integer", size=1, endian="little",n=rowsDICOM*columnsDICOM, signed = FALSE)
+      us.R <- matrix(rn,ncol=columnsDICOM, byrow = TRUE)      
+      us.R <- t(us.R)
+      us.R <- us.R[,ncol(us.R):1]
+
+      rn <- us.R
+    }
+    if( SOPClassUID == "USImageStorage" ) {
+      UltrasoundColorDataPresent <- as.numeric(getDICOMTag(fileName = fileName,tag = '0028,0014'))
+      PhotometricInterpretation <- getDICOMTag(fileName = fileName,tag = '0028,0004')
+      SamplesPerPixel <- getDICOMTag(fileName = fileName,tag = '0028,0002')  
+      # browser()
+      if(! PhotometricInterpretation %in% c("MONOCHROME1","MONOCHROME2","RGB") ) {
+        stop("\n PhotometricInterpretation not valid: #MaiUnaGioiaError")
+      }
+      if(! (UltrasoundColorDataPresent == 1) ) {
+        stop("\n UltrasoundColorDataPresent not valid: #MaiUnaGioiaError")
+      }
+      if(! (SamplesPerPixel == 3) ) {
+        stop("\n SamplesPerPixel not valid: #MaiUnaGioiaError")
+      }
+      if ( Sys.info()["sysname"] == "Windows") {
+        # browser()
+        fileNameRAWFS<-chartr("\\","/",fileNameRAW);
+        fileNameRAWFS<-chartr("/","\\\\",fileNameRAWFS);
+      }
+      else fileNameRAWFS<-fileNameRAW;
+      
+      if(!file.exists(fileNameRAWFS)) logObj$sendLog( "problem in creating image binary file in geoLet::getImageFromRAW()", "ERR"  );
+      
+      rn <- readBin(con = fileNameRAWFS, what="integer", size=1, endian="little",n=rowsDICOM*columnsDICOM * 3, signed = FALSE)
+      
+      us.R <- rn[which(1:length(rn) %% 3 == 1)]
+      us.G <- rn[which(1:length(rn) %% 3 == 2)]
+      us.B <- rn[which(1:length(rn) %% 3 == 0)]
+      
+      us.R <- matrix(us.R,ncol=columnsDICOM, byrow = TRUE)
+      us.G <- matrix(us.G,ncol=columnsDICOM, byrow = TRUE)
+      us.B <- matrix(us.B,ncol=columnsDICOM, byrow = TRUE)
+      
+      us.R <- t(us.R)[,nrow(us.R):1]
+      us.G <- t(us.G)[,nrow(us.G):1]
+      us.B <- t(us.B)[,nrow(us.B):1]      
+      
+      rn <- list( "us.R"=us.R , "us.G"=us.G, "us.B"=us.B )
+    }
+    if( !( SOPClassUID %in% c("RTDoseStorage","USImageStorage","SecondaryCaptureImageStorage") ) ) {
+      if( bitsAllocated!=16 & !(SOPClassUID %in% c("USImageStorage","SecondaryCaptureImageStorage")) )
+        logObj$sendLog( "16bit pixel are allowed only for non-RTDoseStorage", "ERR"  );
+      
+      if( bitsAllocated!=8 & SOPClassUID == "USImageStorage" )
+        logObj$sendLog( "US has been tested for 8 bit only", "ERR"  );      
+      
+      if ( Sys.info()["sysname"] == "Windows") {
+        # browser()
+        fileNameRAWFS<-chartr("\\","/",fileNameRAW);
+        fileNameRAWFS<-chartr("/","\\\\",fileNameRAWFS);
+      }
+      else fileNameRAWFS<-fileNameRAW;
+      
+      if(!file.exists(fileNameRAWFS)) logObj$sendLog( "problem in creating image binary file in geoLet::getImageFromRAW()", "ERR"  );
       if( pixelRepresentation == 1 ) {
+        stop("first time here")
         rn<-readBin(con = fileNameRAWFS, what="integer", size=2, endian="little",n=rowsDICOM*columnsDICOM)  
       } else {
         rn<-readBin(con = fileNameRAWFS, what="integer", size=2, endian="little",n=rowsDICOM*columnsDICOM, signed = FALSE)  
@@ -848,16 +1149,71 @@ geoLet<-function( use.ROICache = FALSE ) {
   # the voxelCube of the original dimensions, otherwise it gives back the interpolated
   # voxelCube according to the wished pixelSpacing along x,y or z
   #=================================================================================
-  getImageVoxelCube<-function( ps.x=NA, ps.y=NA, ps.z=NA , SeriesInstanceUID = NA) {
+  getImageVoxelCube<-function( ps.x=NA, ps.y=NA, ps.z=NA , SeriesInstanceUID = NA , 
+                               RGB.US.format = FALSE) {
     objS<-services();
     
     if( length(giveBackImageSeriesInstanceUID()) > 1 &
         is.na(SeriesInstanceUID) ) {
       logObj$sendLog(  "There are more than one Series, please specify which SeriesInstanceUID you want" ,"ERR" );
     }
+    # browser()
     
-    # prendi il cubone
-    voxelCube<-createImageVoxelCube( SeriesInstanceUID = SeriesInstanceUID)
+    arr.img.type <- SOPClassUIDList[ which(SOPClassUIDList[ ,"SeriesInstanceUID"]==SeriesInstanceUID), "type"]
+    # Se si tratta di una Secondary Capture
+    if( "IMG.SecondCapt" %in% arr.img.type ) {
+      if(all.equal( arr.img.type , rep("IMG.SecondCapt",length(arr.img.type))) == FALSE) {
+        stop("Error.. some img from the same SeriesInstanceUID is not  IMG.SecondCapt")
+      }    
+      # browser()
+      SOPInstanceUID <- names(dataStorage$img[[SeriesInstanceUID]])
+      if( length(SOPInstanceUID) > 1 ) {
+        stop("Error.. too many SOPInstanceUID for a given serie of IMG.SecondCapt")
+      }  
+      mat.all <- dataStorage$img[[SeriesInstanceUID]][[SOPInstanceUID]]
+      new.mat.all <- list()
+      new.mat.all[[ SOPInstanceUID ]] <- mat.all
+      return( new.mat.all )
+      
+    }
+    
+    # Se si tratta di US
+    if( "IMG.US" %in% arr.img.type ) {
+      if(all.equal( arr.img.type , rep("IMG.US",length(arr.img.type))) == FALSE) {
+        stop("Error.. some img from the same SeriesInstanceUID is not an IMG.US")
+      } 
+      
+      # mat.all <- dataStorage$img[[SeriesInstanceUID]]
+      new.mat.all <- list()
+      # browser()
+      for( SOPInstanceUID in names(dataStorage$img[[SeriesInstanceUID]])) {
+        mat.all <- dataStorage$img[[SeriesInstanceUID]][[SOPInstanceUID]]
+        if( RGB.US.format == TRUE ) {
+          mat.all$us.R <- t(mat.all$us.R[,ncol(mat.all$us.R):1])
+          mat.all$us.G <- t(mat.all$us.G[,ncol(mat.all$us.G):1])
+          mat.all$us.B <- t(mat.all$us.B[,ncol(mat.all$us.B):1])
+          
+          rgb.mat <- array( dim=c(dim(mat.all[[1]]),3) )
+          rgb.mat[ , ,1 ] <- mat.all$us.R
+          rgb.mat[ , ,2 ] <- mat.all$us.G
+          rgb.mat[ , ,3 ] <- mat.all$us.B
+          # rgb.mat <- rgb.mat / max(rgb.mat)        
+        } else {
+          rgb.mat <- array( dim=c(dim(mat.all[[1]]),3) )
+          rgb.mat[ , ,1 ] <- mat.all$us.R
+          rgb.mat[ , ,2 ] <- mat.all$us.G
+          rgb.mat[ , ,3 ] <- mat.all$us.B        
+        }
+        new.mat.all[[ SOPInstanceUID ]] <- rgb.mat
+      }
+      # 
+      # plot.new()
+      # rasterImage( aaa[[1]]/max( aaa[[1]]) , 0,0,1,1, interpolate=FALSE )
+      return( new.mat.all )
+    }
+        
+    # Se no, prendi il cubone
+    voxelCube <- createImageVoxelCube( SeriesInstanceUID = SeriesInstanceUID)
     
     # se non  server interpolare
     if(is.na(ps.x) && is.na(ps.y) && is.na(ps.z) ) return(voxelCube)
@@ -1173,7 +1529,9 @@ geoLet<-function( use.ROICache = FALSE ) {
   # giveBackImageSeriesInstanceUID
   #=================================================================================
   giveBackImageSeriesInstanceUID<-function() {
-    arr.SeriesInstanceUID <- unique(SOPClassUIDList[  which(SOPClassUIDList[ ,"type"]=="IMG")    ,"SeriesInstanceUID"])
+    # arr.SeriesInstanceUID <- unique(SOPClassUIDList[  which(SOPClassUIDList[ ,"type"]=="IMG")    ,"SeriesInstanceUID"])
+    arr.SeriesInstanceUID <- unique(SOPClassUIDList[  which(SOPClassUIDList[ ,"type"] %in% c("IMG","IMG.US","IMG.SecondCapt"))    ,"SeriesInstanceUID"])
+    # browser()
     # if( length(arr.SeriesInstanceUID) > 1 ) stop("Error, two SeriesInstanceUID seems to be present")
     if( length(arr.SeriesInstanceUID) ==0 ) stop("Error, no images seems to be loaded")
     # return(arr.SeriesInstanceUID[1])
@@ -1277,6 +1635,20 @@ geoLet<-function( use.ROICache = FALSE ) {
     SIUID <- unique(SOPClassUIDList[  which(SOPClassUIDList[,"kind"] == "PositronEmissionTomographyImageStorage"), "SeriesInstanceUID" ])
     return( SIUID )
   }
+  #=================================================================================
+  # get.US.SeriesInstanceUID
+  #=================================================================================
+  get.US.SeriesInstanceUID<-function( ) {
+    SIUID <- unique(SOPClassUIDList[  which(SOPClassUIDList[,"kind"] == "USImageStorage"), "SeriesInstanceUID" ])
+    return( SIUID )
+  }  
+  #=================================================================================
+  # get.US.SeriesInstanceUID
+  #=================================================================================
+  get.SC.SeriesInstanceUID<-function( ) {
+    SIUID <- unique(SOPClassUIDList[  which(SOPClassUIDList[,"kind"] == "SecondaryCaptureImageStorage"), "SeriesInstanceUID" ])
+    return( SIUID )
+  }    
   
   #=================================================================================
   # class
@@ -1476,6 +1848,8 @@ geoLet<-function( use.ROICache = FALSE ) {
     "get.CT.SeriesInstanceUID"=get.CT.SeriesInstanceUID,
     "get.MRI.SeriesInstanceUID"=get.MRI.SeriesInstanceUID,
     "get.PET.SeriesInstanceUID"=get.PET.SeriesInstanceUID,
+    "get.US.SeriesInstanceUID"=get.US.SeriesInstanceUID,  
+    "get.SC.SeriesInstanceUID"=get.SC.SeriesInstanceUID,
     "get3DPosFromNxNy"=get3DPosFromNxNy,
     "getInterpolatedSlice"=getInterpolatedSlice,
     "getTag"=getTag,
