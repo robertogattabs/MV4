@@ -585,6 +585,9 @@ geoLet<-function( use.ROICache = FALSE ) {
         }
         if( MMatrix[riga, "kind"] == "SecondaryCaptureImageStorage") {
           MMatrix[riga, "type"]<-"IMG.SecondCapt"  
+          pixelSpacing<-objS$splittaTAG(getDICOMTag(fileName = fileNameWithPath,tag = "0028,0030"))    
+          MMatrix[riga, "p.x"]<-pixelSpacing[1]
+          MMatrix[riga, "p.y"]<-pixelSpacing[2]          
         }        
         if( MMatrix[riga, "kind"] == "CTImageStorage" |
             MMatrix[riga, "kind"] == "MRImageStorage" |
@@ -1170,9 +1173,12 @@ geoLet<-function( use.ROICache = FALSE ) {
       if( length(SOPInstanceUID) > 1 ) {
         stop("Error.. too many SOPInstanceUID for a given serie of IMG.SecondCapt")
       }  
+      # browser()
+      # -im
       mat.all <- dataStorage$img[[SeriesInstanceUID]][[SOPInstanceUID]]
       new.mat.all <- list()
       new.mat.all[[ SOPInstanceUID ]] <- mat.all
+      # -fm
       return( new.mat.all )
       
     }
@@ -1519,7 +1525,11 @@ geoLet<-function( use.ROICache = FALSE ) {
       SeriesInstanceUID <- giveBackImageSeriesInstanceUID()
       if( length(SeriesInstanceUID) > 1) stop("Too many SeriesIntanceUID have been found: which one?")
     }
-    riga <- which(SOPClassUIDList[ ,"SeriesInstanceUID"]==SeriesInstanceUID & SOPClassUIDList[ ,"type"]=="IMG")[1]
+    # -im 
+    # browser()
+    # riga <- which(SOPClassUIDList[ ,"SeriesInstanceUID"]==SeriesInstanceUID & SOPClassUIDList[ ,"type"]=="IMG")[1]
+    riga <- which(SOPClassUIDList[ ,"SeriesInstanceUID"]==SeriesInstanceUID & (SOPClassUIDList[ ,"type"] %in% c("IMG","IMG.US","IMG.SecondCapt")) )[1]
+    # -fm
     p.x <- SOPClassUIDList[ riga, "p.x"]
     p.y <- SOPClassUIDList[ riga, "p.y"]
     p.z <- SOPClassUIDList[ riga, "p.z"]
