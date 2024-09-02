@@ -37,9 +37,7 @@ geoLet<-function( use.ROICache = FALSE ) {
   #=================================================================================
   # Open a folder and load the content
   openDICOMFolder<-function( pathToOpen ) {
-    
-    if(!dir.exists(pathToOpen)) logObj$handle( "error" , "The indicate Path does not exist"  );
-    
+    if(!dir.exists(pathToOpen) & !file.exists(pathToOpen)) logObj$handle( "error" , "The indicate Path does not exist"  );
     # ----------------------------------------------
     # get the dcm file type
     # ----------------------------------------------
@@ -510,12 +508,21 @@ geoLet<-function( use.ROICache = FALSE ) {
   #=================================================================================
   getFolderContent <- function( pathToOpen ) {
     objS <- services()
+    # browser()
     # if no path is given, use the set one
-    if(!dir.exists(pathToOpen)) logObj$sendLog(  "The indicate Path does not exist" ,"ERR" );
+    if(!dir.exists(pathToOpen) & !file.exists(pathToOpen))  logObj$sendLog(  "The indicate Path does not exist" ,"ERR" );
     
     # salva in un array tutti i DICOM presenti nella cartella
-    DCMFilenameArray<-list.files(pathToOpen,internalAttributes$defaultExtension.dicom)
-    NIFTIFilenameArray<-list.files(pathToOpen,internalAttributes$defaultExtension.nifti)
+    if( dir.exists(pathToOpen) == TRUE ) {
+      DCMFilenameArray<-list.files(pathToOpen,internalAttributes$defaultExtension.dicom)
+      NIFTIFilenameArray<-list.files(pathToOpen,internalAttributes$defaultExtension.nifti)
+    } else {
+      if( file.exists(pathToOpen) == TRUE ) {
+        DCMFilenameArray <- substr( pathToOpen, max(unlist(str_locate_all( pathToOpen, "/")))+1, str_length(pathToOpen))   
+        NIFTIFilenameArray <- c()
+        pathToOpen <- substr( pathToOpen, 1,max(unlist(str_locate_all( pathToOpen, "/"))))
+      }
+    }
     
     # lista con la SOP Class UID di ciascun DICOM
     SOPClassUIDList<-list()
@@ -534,6 +541,7 @@ geoLet<-function( use.ROICache = FALSE ) {
       if( internalAttributes$verbose == TRUE ) pb$tick()
       
       fileNameWithPath<-paste(pathToOpen,"/",DCMFilenameArray[i] , sep="")
+      # browser()
       # Nel caso in cui sia DICOM
       # if( substr(fileNameWithPath,nchar(fileNameWithPath)-3,nchar(fileNameWithPath))=='.dcm' ) {
       if( substr( fileNameWithPath, nchar( fileNameWithPath ) - 3,nchar(fileNameWithPath))!='.xml' &

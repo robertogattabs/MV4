@@ -41,6 +41,7 @@ services<-function() {
   # getXMLStructureFromDICOMFile
   # ===============================================================
   getXMLStructureFromDICOMFile<-function(fileName, folderCleanUp = TRUE) {
+    # browser()
     # aggiungi estensione xml
     fileNameXML<-paste(fileName,".xml")
     fileNameXML<-str_replace_all(string = fileNameXML , pattern = " .xml",replacement = ".xml")
@@ -49,16 +50,22 @@ services<-function() {
     # browser() # rg-im
     # se file con estensione xml gia' esiste nella cartella non fare nulla altrimenti lo aggiunge
     if(!file.exists( fileNameXML ) | folderCleanUp==TRUE) {
+      # browser()
       stringa1<-"dcm2xml";
       if ( Sys.info()["sysname"] == "Windows") {
         options(warn=-1)
-        # 
+        # -im
+        fileNameXML <- str_replace_all(string = fileNameXML , pattern = ".dcm.xml",replacement =  ".xml")
+        # -fm
         p.fileNameXML <- paste( c('"',fileNameXML,'"') ,collapse = '')
         p.fileName <- paste( c('"',fileName,'"') ,collapse = '')
         stringa2<-paste(" +M  ",p.fileName,p.fileNameXML,collapse='')
         system2(stringa1,stringa2,stdout=NULL)
         options(warn=0)        
       } else {
+        # -im
+        fileNameXML <- str_replace_all(string = fileNameXML , pattern = ".dcm.xml",replacement =  ".xml")
+        # -fm        
         p.fileNameXML <- paste( c("'",fileNameXML,"'") ,collapse = '')
         p.fileName <- paste( c("'",fileName,"'") ,collapse = '')
         stringa2<-paste(" +M  ",p.fileName,p.fileNameXML,collapse='')
@@ -77,7 +84,7 @@ services<-function() {
   # ===============================================================
   getDICOMTag<-function(tag=tag, fileName="", folderCleanUp = TRUE) {
     obj.S<-services();
-
+# browser()
     # exemption: you want an Image!
     if(tag == "7fe0,0010") stop("Not available Yet! (for tag 7fe0,0010)")
 
