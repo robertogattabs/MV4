@@ -263,6 +263,7 @@ geoLet<-function( use.ROICache = FALSE ) {
     listaROI<-list()
     
     # for each ROI
+    # browser()
     for(i in matrice2[2,]) {
       
       # get the points
@@ -529,7 +530,7 @@ geoLet<-function( use.ROICache = FALSE ) {
     nomiColonne <- c("fileName","tag","kind","type","IPP.x","IPP.y","IPP.z","FrameOfReferenceUID","ImageOrder","field2Order","p.x","p.y","p.z","SOPInstanceUID","ImageOrientationPatient","SeriesInstanceUID")
     MMatrix <- matrix(ncol=length(nomiColonne),nrow=0)
     colnames(MMatrix)<-nomiColonne
-    
+    # browser()
     ImagingPositionArray <- c()
     Iteration <- 0
     ImageOrder <- 1
