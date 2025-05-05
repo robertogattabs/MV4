@@ -471,3 +471,90 @@ void regionGrowing( double *cube) {
   
 }
 
+/*
+
+// =========================================================================================
+// =========================================================================================
+// =========================================================================================
+
+#define EPSILON 1e-8
+
+typedef struct {
+  double dist;
+  double temp;
+} Neighbor;
+
+// Funzione per calcolare distanza euclidea in 3D
+double distance3D(double x1, double y1, double z1, double x2, double y2, double z2) {
+  return sqrt((x2 - x1)*(x2 - x1) +
+              (y2 - y1)*(y2 - y1) +
+              (z2 - z1)*(z2 - z1));
+}
+
+// Confronto per ordinare i vicini per distanza (funzione per qsort)
+int compare_neighbors(const void* a, const void* b) {
+  Neighbor* na = (Neighbor*)a;
+  Neighbor* nb = (Neighbor*)b;
+  if (na->dist < nb->dist) return -1;
+  if (na->dist > nb->dist) return 1;
+  return 0;
+}
+
+// Interpolazione usando solo i K punti più vicini
+double interpolate_KNN(double* X, double* Y, double* Z, double* T, int N,
+                       double x, double y, double z, int K) {
+  if (K > N) K = N;
+  
+  Neighbor* neighbors = (Neighbor*)malloc(N * sizeof(Neighbor));
+  for (int i = 0; i < N; i++) {
+    neighbors[i].dist = distance3D(x, y, z, X[i], Y[i], Z[i]);
+    neighbors[i].temp = T[i];
+  }
+  
+  qsort(neighbors, N, sizeof(Neighbor), compare_neighbors);
+  
+  double numerator = 0.0;
+  double denominator = 0.0;
+  
+  for (int i = 0; i < K; i++) {
+    if (neighbors[i].dist < EPSILON) {
+      double result = neighbors[i].temp;
+      free(neighbors);
+      return result;
+    }
+    double weight = 1.0 / neighbors[i].dist;
+    numerator += weight * neighbors[i].temp;
+    denominator += weight;
+  }
+  
+  free(neighbors);
+  return numerator / denominator;
+}
+
+int main() {
+  // Esempio dati: 6 punti noti
+  int N = 6;
+  double X[] = {0, 1, 0, 1, 0.5, 1.5};
+  double Y[] = {0, 0, 1, 1, 0.5, 1.0};
+  double Z[] = {0, 0, 0, 0, 0.0, 0.5};
+  double T[] = {10, 20, 30, 40, 25, 35};
+  
+  // Punti da interpolare
+  int M = 3;
+  double xq[] = {0.5, 0.2, 1.0};
+  double yq[] = {0.5, 0.2, 0.8};
+  double zq[] = {0.0, 0.0, 0.3};
+  
+  int K = 4;  // Numero di punti più vicini da considerare
+  
+  for (int i = 0; i < M; i++) {
+    double temp = interpolate_KNN(X, Y, Z, T, N, xq[i], yq[i], zq[i], K);
+    printf("Temperatura interpolata in (%.2f, %.2f, %.2f) = %.2f\n",
+           xq[i], yq[i], zq[i], temp);
+  }
+  
+  return 0;
+}
+
+ */
+
