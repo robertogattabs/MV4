@@ -30,6 +30,7 @@ geoLet<-function( use.ROICache = FALSE ) {
   dataStorage<-list()                                    # memory data structure
   SOPClassUIDList<-c()
   global_tableROIPointList<-c()
+  global_openedPath <- c()
   
   #=================================================================================
   # openDICOMFolder
@@ -37,6 +38,7 @@ geoLet<-function( use.ROICache = FALSE ) {
   #=================================================================================
   # Open a folder and load the content
   openDICOMFolder<-function( pathToOpen ) {
+
     if(!dir.exists(pathToOpen) & !file.exists(pathToOpen)) logObj$handle( "error" , "The indicate Path does not exist"  );
     # ----------------------------------------------
     # get the dcm file type
@@ -67,16 +69,18 @@ geoLet<-function( use.ROICache = FALSE ) {
     # ----------------------------------------------
     # Carica l'RTDose, se presente
     # ----------------------------------------------
-    if( internalAttributes$verbose == TRUE ) cat("\n RTDose Loading: ")
-    loadRTDoseFiles()
-    if( internalAttributes$verbose == TRUE ) cat( a$quantity," dose loaded" )
+    # if( internalAttributes$verbose == TRUE ) cat("\n RTDose Loading: ")
+    # loadRTDoseFiles()
+    # if( internalAttributes$verbose == TRUE ) cat( a$quantity," dose loaded" )
 
     # ----------------------------------------------
     # Carica i nifti, se presenti
     # ----------------------------------------------
-    if( internalAttributes$verbose == TRUE ) cat("\n nifti files Loading: ")
-    a <- loadNIFTIFileDescription()
-    if( internalAttributes$verbose == TRUE ) cat( a$quantity," structures loaded" )
+    # if( internalAttributes$verbose == TRUE ) cat("\n nifti files Loading: ")
+    # a <- loadNIFTIFileDescription()
+    # if( internalAttributes$verbose == TRUE ) cat( a$quantity," structures loaded" )
+    
+    global_openedPath <<- pathToOpen
     
   }
   
@@ -1030,7 +1034,7 @@ geoLet<-function( use.ROICache = FALSE ) {
       if(! PhotometricInterpretation %in% c("MONOCHROME1","MONOCHROME2","RGB") ) {
         stop("\n PhotometricInterpretation not valid: #MaiUnaGioiaError")
       }
-      if(! (UltrasoundColorDataPresent == 1) ) {
+      if(! (UltrasoundColorDataPresent == 1)  ) {
         stop("\n UltrasoundColorDataPresent not valid: #MaiUnaGioiaError")
       }
       if(! (SamplesPerPixel == 3) ) {
@@ -1045,6 +1049,12 @@ geoLet<-function( use.ROICache = FALSE ) {
       
       if(!file.exists(fileNameRAWFS)) logObj$sendLog( "problem in creating image binary file in geoLet::getImageFromRAW()", "ERR"  );
       
+      # -im per Maria
+      # if(file.info(fileNameRAWFS)$size == 0 & PhotometricInterpretation == "YBR_FULL_422") {
+      #   fileNameRAWFS <- gsub("\\.0\\.raw","\\.1\\.raw",fileNameRAWFS)
+      # }
+      # -fm
+# browser()
       rn <- readBin(con = fileNameRAWFS, what="integer", size=1, endian="little",n=rowsDICOM*columnsDICOM * 3, signed = FALSE)
       
       us.R <- rn[which(1:length(rn) %% 3 == 1)]
