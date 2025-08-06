@@ -1298,7 +1298,7 @@ geoLet<-function( use.ROICache = FALSE ) {
   # NAME: getROIFeatures
   # restituisce le features di una ROI
   #=================================================================================
-  getROIFeatures<-function( Structure , statistical = TRUE, morphological = TRUE, GLCM = TRUE) {
+  getROIFeatures<-function( Structure , statistical = TRUE, morphological = TRUE) {
     ROI <- getROIVoxels( Structure = Structure)
     arr.features <- c()
     if( statistical == TRUE ) {
