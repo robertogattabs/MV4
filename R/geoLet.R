@@ -84,117 +84,6 @@ geoLet<-function( use.ROICache = FALSE ) {
     
   }
   
-  loadRTDoseFiles <- function() {
-    
-    qualiRTDose <- which( SOPClassUIDList[  , "kind"] == "RTDoseStorage" )
-    if( length(qualiRTDose) > 0 ) {
-      for( riga in qualiRTDose ) {
-        fileName <- SOPClassUIDList[qualiRTDose,"fileName" ]
-        righe <- as.numeric(getTag(tag = "0028,0010" , fileName = fileName ))
-        colonne <- as.numeric(getTag(tag = "0028,0011" , fileName = fileName ))
-        PixelSpacing <- getTag(tag = "0028,0030" , fileName = fileName )
-        BitsAllocated <- getTag(tag = "0028,0100" , fileName = fileName )
-        BitsStored <- getTag(tag = "0028,0101" , fileName = fileName )
-        HighBit <- getTag(tag = "0028,0102" , fileName = fileName )
-        PixelRepresentation <- getTag(tag = "0028,0103" , fileName = fileName )
-        DoseUnits <- getTag(tag = "3004,0002" , fileName = fileName )
-        DoseType <- getTag(tag = "3004,0004" , fileName = fileName )
-        GridFrameOffsetVector <- getTag(tag = "3004,000c" , fileName = fileName )
-        FrameOfReferenceUID <- getTag(tag = "0020,0052" , fileName = fileName )
-        SamplesPerPixel <- getTag(tag = "0028,0002" , fileName = fileName )
-        DoseGridScaling <- as.numeric(getTag(tag = "3004,000e" , fileName = fileName ))
-        
-        numSlices <- length(unlist(strsplit( GridFrameOffsetVector , "\\\\")))        
-        
-        if( SamplesPerPixel != "1") { stop(" SamplesPerPixel is expected to be '1' in the current version of moddicom") }
-        if( DoseType != "PHYSICAL") { stop(" SamplesPerPixel is expected to be 'PHYSICAL' in the current version of moddicom") }
-        if( DoseUnits != "GY") { stop(" SamplesPerPixel is expected to be 'GY' in the current version of moddicom") }
-        if( PixelRepresentation != "0") { stop(" PixelRepresentation is expected to be '0' in the current version of moddicom") }
-        if( HighBit != "31") { stop(" HighBit is expected to be '31' in the current version of moddicom") }
-        if( BitsStored != "32") { stop(" BitsStored is expected to be '32' in the current version of moddicom") }
-        if( BitsAllocated != "32") { stop(" HighBit is expected to be '32' in the current version of moddicom") }
-        
-        
-        
-        # rn <- readBin(con = fileName, what = "integer", size = 4, endian = "little",n = file.size(fileName))
-        rn <- readBin(con = fileName, what = "integer", size = 1, endian = "little",n = file.size(fileName))
-        rn <- rn[ length(rn):1 ]
-        
-        aaa <- unlist(lapply( seq(1, ( righe * colonne * numSlices * 4) , by = 4) , function( pos ) {
-          rn[ (pos+3) ] + rn[ (pos+2) ] * 2^8 + rn[ (pos+1) ] * 2^12 + rn[ (pos+0) ] * 2^16  
-        }))
-        rn <- aaa
-        
-        # rn <- rn[ length(rn):1 ]
-        # browser()
-        # oppa <- rn[ (length(rn)-( righe * colonne *numSlices)):length(rn)  ]
-        oppa <- rn[ 1:( righe * colonne * numSlices)   ]
-        oppa <- oppa[ length(oppa):1 ]
-        matRN <- array(0,c(righe,colonne,numSlices))
-        
-        ct<-1
-        for( z in seq(1,numSlices)) {
-          for(x in seq(1,righe)) {
-            for(y in seq(1,colonne)) {
-              matRN[x,colonne-y,z]<-oppa[ct]
-              ct<-ct+1 
-            }
-          }
-        } 
-        browser()
-        # matRN <- matRN * DoseGridScaling
-        
-        SOPInstanceUID <- as.character( SOPClassUIDList[riga,"SOPInstanceUID"] )
-        ImageOrientationPatient <-  SOPClassUIDList[riga,"ImageOrientationPatient"] 
-        
-        newMatRN <- array( 0 , c(colonne,righe,dim(matRN)[3]))
-        for(z in 1:(dim(matRN)[3]) ) {
-          immagine <- t(matRN[(dim(matRN)[1]):1,,z])
-          newMatRN[,,z] <- immagine
-        }        
-        
-        obj.S <- services()
-        doc <- obj.S$getXMLStructureFromDICOMFile( fileName = fileName, folderCleanUp = FALSE )
-        TransferSyntaxUID <- xpathApply(doc,'//element[@tag="0002,0010" and @name="TransferSyntaxUID"]',xmlValue)[[1]]
-        if( !(TransferSyntaxUID %in% c("1.2.840.10008.1.2.1","1.2.840.10008.1.2") )) {
-          stop("TransferSyntaxUID not compatible with the current version")
-        }
-        browser()
-        if( TransferSyntaxUID == "1.2.840.10008.1.2"){
-          # stop("TransferSyntaxUID not compatible with the current version")
-          cat("\n\t TransferSyntaxUID is not little Endian Explicit: conversion could take some minutes..")
-          toBits <- function (x, nBits = 32){ tail(rev(as.numeric(intToBits(x))),nBits) }
-          soglia.cache <- 5
-          voxel.2.consider <- which(newMatRN!=0,arr.ind = T)
-          # tabella <- table(voxel.2.consider)
-          # tabella <- tabella[order(tabella,decreasing = T)]
-          # arr.valori.indici <- names(which(tabella > soglia.cache))
-          tmp <- lapply(1:nrow(voxel.2.consider),function(riga) {
-            voxval <- newMatRN[ voxel.2.consider[riga,1], voxel.2.consider[riga,2], voxel.2.consider[riga,3] ] 
-            bitty <- toBits( voxval , nBits = 32)
-            newbitty <- c(bitty[17:32],bitty[1:16])
-            newMatRN[ voxel.2.consider[riga,1], voxel.2.consider[riga,2], voxel.2.consider[riga,3] ] <<- sum(unlist(lapply(1:length(newbitty) ,  function(i){ (2*newbitty[i])^(length(newbitty)-i)}  )))-1
-          })
-          browser()
-        }
-        newMatRN <- newMatRN * DoseGridScaling
-        
-        
-        dataStorage$doses[[ SOPInstanceUID ]] <<- list()
-        dataStorage$doses[[ SOPInstanceUID ]]$dose <<- newMatRN
-        dataStorage$doses[[ SOPInstanceUID ]]$rows <<- righe
-        dataStorage$doses[[ SOPInstanceUID ]]$cols <<- colonne
-        dataStorage$doses[[ SOPInstanceUID ]]$PixelSpacing <<- PixelSpacing
-        dataStorage$doses[[ SOPInstanceUID ]]$DoseUnits <<- DoseUnits
-        dataStorage$doses[[ SOPInstanceUID ]]$DoseType <<- DoseType
-        dataStorage$doses[[ SOPInstanceUID ]]$GridFrameOffsetVector <<- GridFrameOffsetVector
-        dataStorage$doses[[ SOPInstanceUID ]]$FrameOfReferenceUID <<- FrameOfReferenceUID
-        dataStorage$doses[[ SOPInstanceUID ]]$FrameOfReferenceUID <<- FrameOfReferenceUID
-
-      }
-    }
-  }
-  
   #=================================================================================
   # loadNIFTIFiles
   # Loads the nifti files in the folder
@@ -1619,7 +1508,19 @@ geoLet<-function( use.ROICache = FALSE ) {
   getDICOMTag<-function( tag = tag, fileName ) {
     obj.S<-services();
     if(tag == "7fe0,0010") return( getImageFromRAW(fileName)  );
-    return(obj.S$getDICOMTag(tag = tag,fileName = fileName, folderCleanUp = internalAttributes$attr_folderCleanUp ))
+    
+    if( internalAttributes$getTagXMLCacheList$fileName == fileName  ) {
+      doc <- internalAttributes$getTagXMLCacheList$doc  
+    } else {
+      doc <- obj.S$getXMLStructureFromDICOMFile(fileName = fileName, folderCleanUp = internalAttributes$attr_folderCleanUp)
+      internalAttributes$getTagXMLCacheList$fileName  <<- fileName  
+      internalAttributes$getTagXMLCacheList$doc <<- doc
+    }
+    
+    a <- obj.S$getDICOMTag(tag = tag,fileName = fileName, 
+                           folderCleanUp = internalAttributes$attr_folderCleanUp,
+                           cached.Doc = doc)
+    return(a)
   }
   #=================================================================================
   # getROIImageImageAssociations
@@ -1853,6 +1754,9 @@ geoLet<-function( use.ROICache = FALSE ) {
     internalAttributes$defaultExtension.dicom <<- ""
     internalAttributes$defaultExtension.nifti<<- ".nii.gz"
     internalAttributes$threshold.4.niftiROI<<- 0.4
+    internalAttributes$getTagXMLCacheList <<- list()
+    internalAttributes$getTagXMLCacheList$fileName  <<- ""  
+    internalAttributes$getTagXMLCacheList$doc <<- ""    
     
     # Internal Structures and objs
     logObj <<- logHandler()                                   # log/error handler Object

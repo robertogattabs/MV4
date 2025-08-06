@@ -82,14 +82,19 @@ services<-function() {
   # ===============================================================
   # getDICOMTag
   # ===============================================================
-  getDICOMTag<-function(tag=tag, fileName="", folderCleanUp = TRUE) {
+  getDICOMTag<-function(tag=tag, fileName="", folderCleanUp = TRUE, cached.Doc = NA) {
     obj.S<-services();
 # browser()
     # exemption: you want an Image!
     if(tag == "7fe0,0010") stop("Not available Yet! (for tag 7fe0,0010)")
 
     # build the XML file and get the XML structure
-    doc<-getXMLStructureFromDICOMFile(fileName = fileName, folderCleanUp = folderCleanUp)
+    if( is.na(cached.Doc)) {
+      doc <- getXMLStructureFromDICOMFile(fileName = fileName, folderCleanUp = folderCleanUp)  
+    } else {
+      doc <- cached.Doc   
+    }
+    
 
     # build the QUERY
     stringaQuery<-''
